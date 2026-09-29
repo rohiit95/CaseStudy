@@ -1,0 +1,27 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties.bak
+
+### IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+*.code-workspace
+
+### OS
+.DS_Store
+Thumbs.db
+
+### Env / secrets
+.env
+application-local.yml
+*.log
+
+mvnw
+mvnw.cmd
+maven-wrapper.properties
