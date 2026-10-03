@@ -1,15 +1,19 @@
-package com.casestudy.dao.impl;
+package com.casestudy.dao.mysql;
 
-import com.casestudy.dao.CartActivityDao;
 import com.casestudy.models.CartActivity;
+import com.casestudy.dao.CartActivityStore;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 @Repository
-public class CartActivityDaoImpl implements CartActivityDao {
+@Transactional
+@ConditionalOnExpression("'${casestudy.storage:in-memory}' == 'mysql' || '${casestudy.storage:in-memory}' == 'mysql-redis'")
+public class JpaCartActivityStore implements CartActivityStore {
 
     @PersistenceContext
     private EntityManager entityManager;

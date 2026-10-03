@@ -3,7 +3,7 @@ package com.casestudy.models;
 public enum ReminderStatus {
     PENDING,
     CLAIMED,
-    SENT,
+    FIRED,
     FAILED,
     CANCELLED
 }

@@ -4,7 +4,7 @@ import com.casestudy.models.CartActivity;
 
 import java.util.Optional;
 
-public interface CartActivityDao {
+public interface CartActivityStore {
 
     Optional<CartActivity> findByCartId(String cartId);
 

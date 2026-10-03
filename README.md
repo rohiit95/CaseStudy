@@ -1,97 +1,74 @@
-# CaseStudy
+# CaseStudy — Abandoned Cart Recovery Pipeline
 
-Runnable Spring Boot 3 app (Java 21, Maven) that connects to a **local MySQL** database.
+Spring Boot 3 (Java 21) multi-module app with a **detect → schedule → dispatch → send (mock)** pipeline.
 
-## Prerequisites
+## Modules
 
-- JDK 21
-- Maven 3.9+
-- MySQL running on `localhost:3306`
-
-Default credentials are `root` with an empty password. Override with environment variables if your local MySQL differs.
-
-## Database
-
-On first start, the JDBC URL uses `createDatabaseIfNotExist=true`, so the `casestudy` schema is created if it is missing. You can also create it yourself:
-
-```sql
-CREATE DATABASE IF NOT EXISTS casestudy;
-```
-
-## Run
-
-From this directory (Maven Wrapper is included; a global Maven install is not required):
-
-```powershell
-# Optional: set if your MySQL user/password is not root / empty
-$env:MYSQL_USER = "root"
-$env:MYSQL_PASSWORD = "your-password"
-
-.\mvnw.cmd spring-boot:run
-```
-
-The API listens on [http://localhost:8080](http://localhost:8080).
-
-## Cart and reminder APIs
-
-Create a cart activity row and internally insert `ReminderSchedule` rows (defaults: 30, 60, and 1440 minutes from `lastActivityTime`). If the `cartId` already exists, pending reminders are cancelled, `activityVersion` is incremented, and a new set of reminders is scheduled.
-
-```powershell
-curl -X POST http://localhost:8080/api/carts `
-  -H "Content-Type: application/json" `
-  -d '{"cartId":"cart-100","userId":"user-9"}'
-```
-
-Poll due reminders using:
-
-`SELECT * FROM ReminderSchedule WHERE status = 'PENDING' AND scheduledAt <= NOW() LIMIT 100 FOR UPDATE SKIP LOCKED`
-
-The API claims those rows (`status = CLAIMED`) so concurrent workers do not pick the same jobs:
-
-```powershell
-curl -X POST "http://localhost:8080/api/reminders/claim?limit=100"
-```
-
-To exercise the poll immediately, create a cart with a 0-minute window:
-
-```powershell
-curl -X POST http://localhost:8080/api/carts `
-  -H "Content-Type: application/json" `
-  -d '{"cartId":"cart-due","reminderWindowsInMins":[0]}'
-curl -X POST "http://localhost:8080/api/reminders/claim?limit=100"
-```
-
-## Verify
-
-1. Actuator health (includes the DB check):
-
-   ```powershell
-   curl http://localhost:8080/actuator/health
-   ```
-
-   You should see `"status":"UP"` and a `db` component.
-
-2. Direct MySQL ping:
-
-   ```powershell
-   curl http://localhost:8080/api/status
-   ```
-
-   You should see `"database":"connected"` plus the MySQL product name and catalog `casestudy`.
-
-## Configuration
-
-| Variable | Default |
+| Module | Role |
 | --- | --- |
-| `MYSQL_URL` | `jdbc:mysql://localhost:3306/casestudy?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC` |
-| `MYSQL_USER` | `root` |
-| `MYSQL_PASSWORD` | (empty) |
-| `SERVER_PORT` | `8080` |
+| `casestudy-app` | HTTP API, pipeline, pluggable persistence |
+| `ConfigService` | Default reminder windows, template, enabled flag |
+| `AbService` | 5-bucket experiments (windows, template, `reminderEnabled`) |
 
-## Tests
+## Pipeline
 
-Unit/context tests use an in-memory H2 database (`application-test.yml`) so they do not need MySQL:
+1. **Detect** — `AbandonmentDetector` (idempotent on `eventId`, version bump, cancel pending)
+2. **Schedule** — `NotificationScheduler` (AB + config → `PENDING` jobs)
+3. **Dispatch** — `ReminderJobRunner` claims due rows (`SKIP LOCKED` on MySQL)
+4. **Send** — `NotificationDispatcher` + **Strategy** channels (`Email` / `Sms` / `Push` mocks). Status becomes **`FIRED` only after mock publish succeeds**.
+
+## Storage (`casestudy.storage`)
+
+| Value | Description |
+| --- | --- |
+| `in-memory` | Default profile `local-inmemory`; no MySQL required |
+| `mysql` | JPA + MySQL (`spring.profiles.active=mysql`) |
+| `mysql-redis` | MySQL + `DueReminderIndex` decorator (in-process Redis simulation; swap for `RedisTemplate`) |
+
+## Run (in-memory, default)
 
 ```powershell
-.\mvnw.cmd test
+cd casestudy-app
+mvn spring-boot:run
+```
+
+## Run (MySQL)
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "mysql"
+mvn spring-boot:run -pl casestudy-app
+```
+
+## APIs
+
+**Ingest (detect + schedule)**
+
+```powershell
+curl -X POST http://localhost:8080/api/cart/events `
+  -H "Content-Type: application/json" `
+  -d '{"eventId":"evt-1","cartId":"cart-1","userId":"user-1","userType":"LOGGED_IN","activityType":"EDIT","activityTime":"2026-10-02T18:00:00"}'
+```
+
+**Dispatch due jobs**
+
+```powershell
+curl -X POST "http://localhost:8080/api/reminders/dispatch?limit=100"
+```
+
+## Tests (fake clock)
+
+```powershell
+mvn test -pl casestudy-app
+```
+
+`FakeClockPipelineVerifierTest` advances `MutableClock`, runs dispatch, and asserts jobs reach **`FIRED`** after mock publish.
+
+## Package layout (casestudy-app)
+
+```
+com.casestudy.dao.{memory,mysql,redis}   # CartActivityStore, ReminderScheduleStore
+com.casestudy.pipeline.detect                    # AbandonmentDetector
+com.casestudy.pipeline.schedule                  # NotificationScheduler
+com.casestudy.pipeline.dispatch                  # ReminderJobRunner, FireTimeGuard
+com.casestudy.pipeline.send                      # NotificationChannel strategies, dispatcher
 ```
