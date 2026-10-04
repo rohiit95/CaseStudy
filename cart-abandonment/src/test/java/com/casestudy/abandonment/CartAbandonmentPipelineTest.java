@@ -3,6 +3,7 @@ package com.casestudy.abandonment;
 import com.casestudy.ab.AbService;
 import com.casestudy.ab.CartReminderVariant;
 import com.casestudy.ab.ReminderChannel;
+import com.casestudy.abandonment.exception.InvalidCartEventException;
 import com.casestudy.abandonment.model.ActivityType;
 import com.casestudy.abandonment.model.CancellationReason;
 import com.casestudy.abandonment.model.CartEvent;
@@ -13,6 +14,7 @@ import com.casestudy.abandonment.model.ProcessResultType;
 import com.casestudy.abandonment.model.ScheduleJob;
 import com.casestudy.abandonment.model.UserType;
 import com.casestudy.abandonment.send.NotificationChannelType;
+import com.casestudy.abandonment.send.RateLimitedNotificationPublisher;
 import com.casestudy.abandonment.send.RecordingNotificationPublisher;
 import com.casestudy.abandonment.time.FakeClock;
 import com.casestudy.config.impl.ConfigServiceImpl;
@@ -21,9 +23,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CartAbandonmentPipelineTest {
 
@@ -106,6 +110,23 @@ class CartAbandonmentPipelineTest {
         module.jobRunner().runDue(20);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(2);
+    }
+
+    @Test
+    void reminderWindowsAreOffsetFromConfirmationTimeNotLastActivityPlusAbandonmentWindow() {
+        module.cartEventProcessor().process(edit("e1", "cart-confirm", "user-1"));
+        clock.advance(Duration.ofMinutes(30));
+        LocalDateTime confirmedAt = clock.now();
+        module.jobRunner().runDue(20);
+
+        List<ScheduleJob> reminders = jobs("cart-confirm", JobType.REMINDER, JobStatus.PENDING);
+        assertThat(reminders)
+                .extracting(ScheduleJob::getScheduledAt)
+                .containsExactly(
+                        confirmedAt.plusMinutes(30),
+                        confirmedAt.plusMinutes(60),
+                        confirmedAt.plusMinutes(1440)
+                );
     }
 
     @Test
@@ -206,6 +227,68 @@ class CartAbandonmentPipelineTest {
         assertThat(publisher.getPublished())
                 .isNotEmpty()
                 .allMatch(published -> published.channelType() == NotificationChannelType.SMS);
+    }
+
+    @Test
+    void rejectsInvalidCartEvent() {
+        CartEvent event = new CartEvent();
+        assertThatThrownBy(() -> module.cartEventProcessor().process(event))
+                .isInstanceOf(InvalidCartEventException.class)
+                .hasMessageContaining("eventId");
+    }
+
+    @Test
+    void rateLimitedReminderRetriesThenFires() {
+        RateLimitedNotificationPublisher limited =
+                new RateLimitedNotificationPublisher(publisher, 1, Duration.ofMinutes(1));
+        module = new CartAbandonmentModule(clock, config, abService, limited);
+
+        module.cartEventProcessor().process(edit("e1", "cart-429", "user-1"));
+        clock.advance(Duration.ofMinutes(30));
+        module.jobRunner().runDue(20);
+        clock.advance(Duration.ofMinutes(30));
+        module.jobRunner().runDue(20);
+
+        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.FIRED)).isEmpty();
+        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PENDING)).isNotEmpty();
+        assertThat(publisher.getPublished()).isEmpty();
+        assertThat(module.deadLetterQueue().replayable()).isEmpty();
+
+        clock.advance(Duration.ofMinutes(1));
+        module.jobRunner().runDue(20);
+
+        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
+        assertThat(publisher.getPublished()).hasSize(1);
+        assertThat(module.deadLetterQueue().replayable()).isEmpty();
+        assertThat(limited.attempts()).isEqualTo(2);
+    }
+
+    @Test
+    void rateLimitedReminderExhaustsRetriesAndGoesToDeadLetter() {
+        RateLimitedNotificationPublisher limited =
+                new RateLimitedNotificationPublisher(publisher, 99, Duration.ofMinutes(1));
+        module = new CartAbandonmentModule(clock, config, abService, limited);
+
+        module.cartEventProcessor().process(edit("e1", "cart-dlq", "user-1"));
+        clock.advance(Duration.ofMinutes(30));
+        module.jobRunner().runDue(20);
+        clock.advance(Duration.ofMinutes(30));
+
+        module.jobRunner().runDue(20);
+        clock.advance(Duration.ofMinutes(1));
+        module.jobRunner().runDue(20);
+        clock.advance(Duration.ofMinutes(1));
+        module.jobRunner().runDue(20);
+
+        assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.FAILED)).hasSize(1);
+        assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.FIRED)).isEmpty();
+        assertThat(publisher.getPublished()).isEmpty();
+        assertThat(module.deadLetterQueue().replayable())
+                .hasSize(1)
+                .allMatch(record -> record.jobType() == JobType.REMINDER)
+                .allMatch(record -> record.attemptCount() == 3)
+                .allMatch(record -> record.reason().contains("Retries exhausted"));
+        assertThat(limited.attempts()).isEqualTo(3);
     }
 
     private List<ScheduleJob> jobs(String cartId, JobType type, JobStatus status) {

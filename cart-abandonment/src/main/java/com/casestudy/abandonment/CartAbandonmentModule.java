@@ -15,6 +15,8 @@ import com.casestudy.abandonment.dispatch.JobRunner;
 import com.casestudy.abandonment.dispatch.JobRunnerImpl;
 import com.casestudy.abandonment.dispatch.NotificationDispatcher;
 import com.casestudy.abandonment.dispatch.NotificationDispatcherImpl;
+import com.casestudy.abandonment.dlq.DeadLetterQueue;
+import com.casestudy.abandonment.dlq.InMemoryDeadLetterQueue;
 import com.casestudy.abandonment.experiment.ExperimentResolver;
 import com.casestudy.abandonment.experiment.ExperimentResolverImpl;
 import com.casestudy.abandonment.guardrail.GuardrailEngine;
@@ -30,7 +32,11 @@ import com.casestudy.abandonment.send.NotificationChannelRegistry;
 import com.casestudy.abandonment.send.NotificationPublisher;
 import com.casestudy.abandonment.send.PushNotificationChannel;
 import com.casestudy.abandonment.send.SmsNotificationChannel;
+import com.casestudy.abandonment.retry.ExponentialBackoffRetryPolicy;
+import com.casestudy.abandonment.retry.RetryPolicy;
 import com.casestudy.abandonment.time.Clock;
+
+import java.time.Duration;
 import com.casestudy.config.ConfigService;
 
 import java.util.List;
@@ -45,6 +51,7 @@ public final class CartAbandonmentModule {
     private final CartEventProcessor cartEventProcessor;
     private final JobRunner jobRunner;
     private final NotificationDispatcher notificationDispatcher;
+    private final DeadLetterQueue deadLetterQueue;
 
     public CartAbandonmentModule(Clock clock, ConfigService configService, AbService abService) {
         this(clock, configService, abService, new ChannelBusNotificationPublisher());
@@ -64,19 +71,26 @@ public final class CartAbandonmentModule {
         ExperimentResolver experimentResolver = new ExperimentResolverImpl(abService, configService);
         this.cartEventProcessor = new CartEventProcessorImpl(cartActivityDao, scheduler, configService, clock);
         NotificationScheduler notificationScheduler =
-                new NotificationSchedulerImpl(scheduler, experimentResolver, configService);
+                new NotificationSchedulerImpl(scheduler, experimentResolver, clock);
         GuardrailEngine guardrailEngine = new GuardrailEngineImpl(cartActivityDao);
         NotificationChannelRegistry channels = new NotificationChannelRegistry(List.of(
                 new EmailNotificationChannel(publisher),
                 new SmsNotificationChannel(publisher),
                 new PushNotificationChannel(publisher)
         ));
+        RetryPolicy retryPolicy = new ExponentialBackoffRetryPolicy(
+                configService.getMaxNotificationAttempts(),
+                Duration.ofMinutes(configService.getNotificationRetryBaseDelayMinutes())
+        );
+        this.deadLetterQueue = new InMemoryDeadLetterQueue();
         NotificationDispatcherImpl dispatcher = new NotificationDispatcherImpl(
                 guardrailEngine,
                 experimentResolver,
                 channels,
                 scheduleDao,
                 processedJobDao,
+                retryPolicy,
+                deadLetterQueue,
                 clock
         );
         this.notificationDispatcher = dispatcher;
@@ -90,7 +104,7 @@ public final class CartAbandonmentModule {
                         clock
                 ))
                 .put(JobType.REMINDER, dispatcher);
-        this.jobRunner = new JobRunnerImpl(scheduler, handlers);
+        this.jobRunner = new JobRunnerImpl(scheduler, handlers, scheduleDao, deadLetterQueue, clock);
     }
 
     public Clock clock() {
@@ -119,5 +133,9 @@ public final class CartAbandonmentModule {
 
     public NotificationDispatcher notificationDispatcher() {
         return notificationDispatcher;
+    }
+
+    public DeadLetterQueue deadLetterQueue() {
+        return deadLetterQueue;
     }
 }

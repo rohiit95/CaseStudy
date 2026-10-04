@@ -1,14 +1,13 @@
 package com.casestudy.abandonment.reminder;
 
 import com.casestudy.ab.CartReminderVariant;
-import com.casestudy.abandonment.detect.CartEventProcessorImpl;
 import com.casestudy.abandonment.experiment.ExperimentResolver;
 import com.casestudy.abandonment.model.CartActivity;
 import com.casestudy.abandonment.model.JobType;
 import com.casestudy.abandonment.model.ScheduleJob;
 import com.casestudy.abandonment.model.ScheduleMetadata;
 import com.casestudy.abandonment.scheduler.Scheduler;
-import com.casestudy.config.ConfigService;
+import com.casestudy.abandonment.time.Clock;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -18,16 +17,16 @@ public final class NotificationSchedulerImpl implements NotificationScheduler {
 
     private final Scheduler scheduler;
     private final ExperimentResolver experimentResolver;
-    private final ConfigService configService;
+    private final Clock clock;
 
     public NotificationSchedulerImpl(
             Scheduler scheduler,
             ExperimentResolver experimentResolver,
-            ConfigService configService
+            Clock clock
     ) {
         this.scheduler = scheduler;
         this.experimentResolver = experimentResolver;
-        this.configService = configService;
+        this.clock = clock;
     }
 
     @Override
@@ -40,12 +39,10 @@ public final class NotificationSchedulerImpl implements NotificationScheduler {
         if (!variant.reminderEnabled() || variant.reminderWindows().isEmpty()) {
             return List.of();
         }
-        int abandonmentWindow = configService.getAbandonmentWindowInMinutes();
+        LocalDateTime confirmedAt = clock.now();
         List<ScheduleJob> jobs = new ArrayList<>();
         for (Integer window : variant.reminderWindows()) {
-            LocalDateTime fireAt = cart.getLastActivityTime()
-                    .plusMinutes(abandonmentWindow)
-                    .plusMinutes(window);
+            LocalDateTime fireAt = confirmedAt.plusMinutes(window);
             ScheduleMetadata metadata = new ScheduleMetadata(
                     cart.getCartId(),
                     cart.getUserId(),
