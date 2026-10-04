@@ -3,7 +3,7 @@ package com.casestudy.abandonment.model;
 public enum JobStatus {
     PENDING,
     CLAIMED,
-    FIRED,
+    PROCESSED,
     FAILED,
     CANCELLED
 }

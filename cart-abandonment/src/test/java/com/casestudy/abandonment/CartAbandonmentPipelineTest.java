@@ -103,12 +103,12 @@ class CartAbandonmentPipelineTest {
 
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
-        assertThat(jobs("cart-time", JobType.ABANDONMENT_CONFIRM, JobStatus.FIRED)).hasSize(1);
+        assertThat(jobs("cart-time", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(3);
 
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
-        assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
+        assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(2);
     }
 
@@ -144,7 +144,7 @@ class CartAbandonmentPipelineTest {
 
         assertThat(module.cartActivityDao().findByCartId("cart-buy").orElseThrow().getState())
                 .isEqualTo(CartState.PURCHASED);
-        assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.FIRED)).isEmpty();
+        assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
         assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.CANCELLED))
                 .allMatch(job -> job.getCancellationReason() == CancellationReason.PURCHASED);
     }
@@ -209,7 +209,7 @@ class CartAbandonmentPipelineTest {
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
 
-        assertThat(jobs("cart-hold", JobType.ABANDONMENT_CONFIRM, JobStatus.FIRED)).hasSize(1);
+        assertThat(jobs("cart-hold", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-hold", JobType.REMINDER, JobStatus.PENDING)).isEmpty();
     }
 
@@ -223,7 +223,7 @@ class CartAbandonmentPipelineTest {
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
 
-        assertThat(jobs("cart-sms", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
+        assertThat(jobs("cart-sms", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(publisher.getPublished())
                 .isNotEmpty()
                 .allMatch(published -> published.channelType() == NotificationChannelType.SMS);
@@ -249,7 +249,7 @@ class CartAbandonmentPipelineTest {
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
 
-        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.FIRED)).isEmpty();
+        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
         assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PENDING)).isNotEmpty();
         assertThat(publisher.getPublished()).isEmpty();
         assertThat(module.deadLetterQueue().replayable()).isEmpty();
@@ -257,7 +257,7 @@ class CartAbandonmentPipelineTest {
         clock.advance(Duration.ofMinutes(1));
         module.jobRunner().runDue(20);
 
-        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
+        assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(publisher.getPublished()).hasSize(1);
         assertThat(module.deadLetterQueue().replayable()).isEmpty();
         assertThat(limited.attempts()).isEqualTo(2);
@@ -281,7 +281,7 @@ class CartAbandonmentPipelineTest {
         module.jobRunner().runDue(20);
 
         assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.FAILED)).hasSize(1);
-        assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.FIRED)).isEmpty();
+        assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
         assertThat(publisher.getPublished()).isEmpty();
         assertThat(module.deadLetterQueue().replayable())
                 .hasSize(1)

@@ -112,7 +112,7 @@ public final class NotificationDispatcherImpl implements NotificationDispatcher,
                 return onProviderFailure(job, new NotificationProviderException(published.detail()));
             }
             processedJobDao.markProcessed(firedKey(job));
-            scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
+            scheduleDao.updateStatus(job.getScheduleId(), JobStatus.PROCESSED, null, clock.now());
             return DispatchResult.fired(published.providerMessageId());
         } catch (NotificationProviderException ex) {
             return onProviderFailure(job, ex);

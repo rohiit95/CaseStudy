@@ -41,7 +41,7 @@ public final class AbandonmentConfirmationHandler implements JobHandler {
     public void handle(ScheduleJob job) {
         String firedKey = job.getIdempotencyKey() + ":fired";
         if (processedJobDao.alreadyProcessed(firedKey)) {
-            scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
+            scheduleDao.updateStatus(job.getScheduleId(), JobStatus.PROCESSED, null, clock.now());
             return;
         }
         GuardrailDecision decision = guardrailEngine.evaluate(job);
@@ -58,6 +58,6 @@ public final class AbandonmentConfirmationHandler implements JobHandler {
                 .orElseThrow(() -> new CartNotFoundException(job.getMetadata().cartId()));
         notificationScheduler.scheduleReminders(cart);
         processedJobDao.markProcessed(firedKey);
-        scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
+        scheduleDao.updateStatus(job.getScheduleId(), JobStatus.PROCESSED, null, clock.now());
     }
 }

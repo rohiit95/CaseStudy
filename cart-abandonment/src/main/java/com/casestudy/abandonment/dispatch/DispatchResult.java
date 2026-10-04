@@ -6,7 +6,7 @@ import com.casestudy.abandonment.model.JobStatus;
 public record DispatchResult(JobStatus status, CancellationReason reason, String providerMessageId) {
 
     public static DispatchResult fired(String providerMessageId) {
-        return new DispatchResult(JobStatus.FIRED, null, providerMessageId);
+        return new DispatchResult(JobStatus.PROCESSED, null, providerMessageId);
     }
 
     public static DispatchResult cancelled(CancellationReason reason) {
