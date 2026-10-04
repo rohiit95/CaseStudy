@@ -21,7 +21,7 @@ public interface ScheduleDao {
 
     List<ScheduleJob> findByCartIdAndType(String cartId, JobType jobType);
 
-    List<ScheduleJob> claimDue(LocalDateTime now, int limit);
+    List<ScheduleJob> claimDue(JobType jobType, LocalDateTime now, int limit);
 
     int cancelPendingByCartId(String cartId, CancellationReason reason, LocalDateTime now);
 

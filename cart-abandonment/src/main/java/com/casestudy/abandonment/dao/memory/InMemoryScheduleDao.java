@@ -67,11 +67,15 @@ public final class InMemoryScheduleDao implements ScheduleDao {
     }
 
     @Override
-    public List<ScheduleJob> claimDue(LocalDateTime now, int limit) {
+    public List<ScheduleJob> claimDue(JobType jobType, LocalDateTime now, int limit) {
+        if (jobType == null) {
+            throw new IllegalArgumentException("jobType is required to claim jobs");
+        }
         claimLock.lock();
         try {
             List<ScheduleJob> due = timeIndexedScheduleJobsMap.values().stream()
                     .filter(job -> job.getStatus() == JobStatus.PENDING)
+                    .filter(job -> job.getJobType() == jobType)
                     .filter(job -> !job.getScheduledAt().isAfter(now))
                     .sorted(Comparator.comparing(ScheduleJob::getScheduledAt).thenComparing(ScheduleJob::getScheduleId))
                     .limit(limit)

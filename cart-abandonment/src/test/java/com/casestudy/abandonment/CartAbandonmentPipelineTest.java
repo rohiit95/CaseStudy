@@ -102,12 +102,12 @@ class CartAbandonmentPipelineTest {
         module.cartEventProcessor().process(edit("e1", "cart-time", "user-1"));
 
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         assertThat(jobs("cart-time", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(3);
 
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(2);
     }
@@ -117,7 +117,7 @@ class CartAbandonmentPipelineTest {
         module.cartEventProcessor().process(edit("e1", "cart-confirm", "user-1"));
         clock.advance(Duration.ofMinutes(30));
         LocalDateTime confirmedAt = clock.now();
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
 
         List<ScheduleJob> reminders = jobs("cart-confirm", JobType.REMINDER, JobStatus.PENDING);
         assertThat(reminders)
@@ -133,14 +133,14 @@ class CartAbandonmentPipelineTest {
     void purchaseSuppressesPendingReminders() {
         module.cartEventProcessor().process(edit("e1", "cart-buy", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
 
         CartEvent purchase = edit("e-buy", "cart-buy", "user-1");
         purchase.setActivityType(ActivityType.PURCHASE);
         module.cartEventProcessor().process(purchase);
 
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
 
         assertThat(module.cartActivityDao().findByCartId("cart-buy").orElseThrow().getState())
                 .isEqualTo(CartState.PURCHASED);
@@ -153,7 +153,7 @@ class CartAbandonmentPipelineTest {
     void fireTimeGuardSuppressesStaleVersionAfterPurchase() {
         module.cartEventProcessor().process(edit("e1", "cart-race", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         ScheduleJob reminder = jobs("cart-race", JobType.REMINDER, JobStatus.PENDING).stream().findFirst().get();
 
         CartEvent purchase = edit("e-buy", "cart-race", "user-1");
@@ -169,7 +169,7 @@ class CartAbandonmentPipelineTest {
     void versionMismatchCancelsStaleReminderAtDispatch() {
         module.cartEventProcessor().process(edit("e1", "cart-stale", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         ScheduleJob reminder = jobs("cart-stale", JobType.REMINDER, JobStatus.PENDING).stream().findFirst().get();
 
         clock.advance(Duration.ofMinutes(11));
@@ -207,7 +207,7 @@ class CartAbandonmentPipelineTest {
         module = new CartAbandonmentModule(clock, config, abService, publisher);
         module.cartEventProcessor().process(edit("e1", "cart-hold", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
 
         assertThat(jobs("cart-hold", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-hold", JobType.REMINDER, JobStatus.PENDING)).isEmpty();
@@ -219,9 +219,9 @@ class CartAbandonmentPipelineTest {
         module = new CartAbandonmentModule(clock, config, abService, publisher);
         module.cartEventProcessor().process(edit("e1", "cart-sms", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
 
         assertThat(jobs("cart-sms", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(publisher.getPublished())
@@ -245,9 +245,9 @@ class CartAbandonmentPipelineTest {
 
         module.cartEventProcessor().process(edit("e1", "cart-429", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
 
         assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
         assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PENDING)).isNotEmpty();
@@ -255,7 +255,7 @@ class CartAbandonmentPipelineTest {
         assertThat(module.deadLetterQueue().replayable()).isEmpty();
 
         clock.advance(Duration.ofMinutes(1));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
 
         assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
         assertThat(publisher.getPublished()).hasSize(1);
@@ -271,14 +271,14 @@ class CartAbandonmentPipelineTest {
 
         module.cartEventProcessor().process(edit("e1", "cart-dlq", "user-1"));
         clock.advance(Duration.ofMinutes(30));
-        module.jobRunner().runDue(20);
+        runConfirmationJobs();
         clock.advance(Duration.ofMinutes(30));
 
-        module.jobRunner().runDue(20);
+        runReminderJobs();
         clock.advance(Duration.ofMinutes(1));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
         clock.advance(Duration.ofMinutes(1));
-        module.jobRunner().runDue(20);
+        runReminderJobs();
 
         assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.FAILED)).hasSize(1);
         assertThat(jobs("cart-dlq", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
@@ -289,6 +289,30 @@ class CartAbandonmentPipelineTest {
                 .allMatch(record -> record.attemptCount() == 3)
                 .allMatch(record -> record.reason().contains("Retries exhausted"));
         assertThat(limited.attempts()).isEqualTo(3);
+    }
+
+    @Test
+    void reminderRunnerDoesNotClaimDueConfirmationJobs() {
+        module.cartEventProcessor().process(edit("e1", "cart-typed", "user-1"));
+        clock.advance(Duration.ofMinutes(30));
+
+        runReminderJobs();
+
+        assertThat(jobs("cart-typed", JobType.ABANDONMENT_CONFIRM, JobStatus.PENDING)).hasSize(1);
+        assertThat(jobs("cart-typed", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).isEmpty();
+
+        assertThatThrownBy(() ->
+                module.confirmationJobRunner().runDue(JobType.REMINDER, 20)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot claim");
+    }
+
+    private void runConfirmationJobs() {
+        module.confirmationJobRunner().runDue(JobType.ABANDONMENT_CONFIRM, 20);
+    }
+
+    private void runReminderJobs() {
+        module.reminderJobRunner().runDue(JobType.REMINDER, 20);
     }
 
     private List<ScheduleJob> jobs(String cartId, JobType type, JobStatus status) {

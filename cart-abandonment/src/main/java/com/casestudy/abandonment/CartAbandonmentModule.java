@@ -49,7 +49,8 @@ public final class CartAbandonmentModule {
     private final ProcessedJobDao processedJobDao;
     private final Scheduler scheduler;
     private final CartEventProcessor cartEventProcessor;
-    private final JobRunner jobRunner;
+    private final JobRunner confirmationJobRunner;
+    private final JobRunner reminderJobRunner;
     private final NotificationDispatcher notificationDispatcher;
     private final DeadLetterQueue deadLetterQueue;
 
@@ -104,7 +105,22 @@ public final class CartAbandonmentModule {
                         clock
                 ))
                 .put(JobType.REMINDER, dispatcher);
-        this.jobRunner = new JobRunnerImpl(scheduler, handlers, scheduleDao, deadLetterQueue, clock);
+        this.confirmationJobRunner = new JobRunnerImpl(
+                JobType.ABANDONMENT_CONFIRM,
+                handlers.handler(JobType.ABANDONMENT_CONFIRM),
+                scheduler,
+                scheduleDao,
+                deadLetterQueue,
+                clock
+        );
+        this.reminderJobRunner = new JobRunnerImpl(
+                JobType.REMINDER,
+                handlers.handler(JobType.REMINDER),
+                scheduler,
+                scheduleDao,
+                deadLetterQueue,
+                clock
+        );
     }
 
     public Clock clock() {
@@ -127,8 +143,12 @@ public final class CartAbandonmentModule {
         return cartEventProcessor;
     }
 
-    public JobRunner jobRunner() {
-        return jobRunner;
+    public JobRunner confirmationJobRunner() {
+        return confirmationJobRunner;
+    }
+
+    public JobRunner reminderJobRunner() {
+        return reminderJobRunner;
     }
 
     public NotificationDispatcher notificationDispatcher() {

@@ -70,8 +70,8 @@ public final class SchedulerImpl implements Scheduler {
     }
 
     @Override
-    public List<ScheduleJob> claimDue(int limit) {
-        return scheduleDao.claimDue(clock.now(), limit);
+    public List<ScheduleJob> claimDue(JobType jobType, int limit) {
+        return scheduleDao.claimDue(jobType, clock.now(), limit);
     }
 
     @Override

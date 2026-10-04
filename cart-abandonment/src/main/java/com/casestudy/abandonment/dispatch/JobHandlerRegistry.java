@@ -15,11 +15,15 @@ public final class JobHandlerRegistry {
         return this;
     }
 
-    public void handle(ScheduleJob job) {
-        JobHandler handler = handlers.get(job.getJobType());
+    public JobHandler handler(JobType type) {
+        JobHandler handler = handlers.get(type);
         if (handler == null) {
-            throw new IllegalStateException("No handler for " + job.getJobType());
+            throw new IllegalStateException("No handler for " + type);
         }
-        handler.handle(job);
+        return handler;
+    }
+
+    public void handle(ScheduleJob job) {
+        handler(job.getJobType()).handle(job);
     }
 }

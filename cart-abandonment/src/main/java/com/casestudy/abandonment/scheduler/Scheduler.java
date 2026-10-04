@@ -21,7 +21,7 @@ public interface Scheduler {
 
     int cancelPendingByCartId(String cartId, CancellationReason reason);
 
-    List<ScheduleJob> claimDue(int limit);
+    List<ScheduleJob> claimDue(JobType jobType, int limit);
 
     List<ScheduleJob> jobsForCart(String cartId);
 }
