@@ -19,11 +19,7 @@ public interface ScheduleDao {
 
     List<ScheduleJob> findByCartId(String cartId);
 
-    List<ScheduleJob> findByCartIdAndType(String cartId, JobType jobType);
-
     List<ScheduleJob> claimDue(JobType jobType, LocalDateTime now, int limit);
-
-    int cancelPendingByCartId(String cartId, CancellationReason reason, LocalDateTime now);
 
     void updateStatus(Long scheduleId, JobStatus status, CancellationReason reason, LocalDateTime now);
 }

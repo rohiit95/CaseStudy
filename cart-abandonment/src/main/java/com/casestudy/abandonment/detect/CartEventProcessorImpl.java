@@ -1,7 +1,7 @@
 package com.casestudy.abandonment.detect;
 
-import com.casestudy.abandonment.exception.InvalidCartEventException;
 import com.casestudy.abandonment.dao.CartActivityDao;
+import com.casestudy.abandonment.exception.InvalidCartEventException;
 import com.casestudy.abandonment.model.ActivityType;
 import com.casestudy.abandonment.model.CancellationReason;
 import com.casestudy.abandonment.model.CartActivity;
@@ -11,6 +11,8 @@ import com.casestudy.abandonment.model.CartState;
 import com.casestudy.abandonment.model.JobType;
 import com.casestudy.abandonment.model.ProcessResultType;
 import com.casestudy.abandonment.model.ScheduleMetadata;
+import com.casestudy.abandonment.model.UserType;
+import com.casestudy.abandonment.scheduler.ScheduleKeys;
 import com.casestudy.abandonment.scheduler.Scheduler;
 import com.casestudy.abandonment.time.Clock;
 import com.casestudy.config.ConfigService;
@@ -90,7 +92,7 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
             cart.setCreatedAt(activityTime);
             cart.setState(CartState.ACTIVE);
         } else if (!withinDebounce) {
-            scheduler.cancelPendingByCartId(cart.getCartId(), CancellationReason.ACTIVITY_RESUMED);
+            cancelAbandonmentCheck(cart.getCartId(), cart.getCartVersion(), CancellationReason.ACTIVITY_RESUMED);
             cart.setCartVersion(cart.getCartVersion() + 1);
             cart.setState(CartState.ACTIVE);
         }
@@ -105,12 +107,14 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
     }
 
     private CartProcessResult terminate(CartEvent event, CartActivity cart, LocalDateTime activityTime) {
+        int scheduledVersion = cart.getCartVersion();
         if (cart.getCartId() == null) {
             cart.setCartId(event.getCartId());
+            scheduledVersion = 1;
             cart.setCartVersion(1);
             cart.setCreatedAt(activityTime);
         } else {
-            cart.setCartVersion(cart.getCartVersion() + 1);
+            cart.setCartVersion(scheduledVersion + 1);
         }
         applyIdentity(cart, event);
         cart.setLastActivityTime(activityTime);
@@ -120,24 +124,26 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
         CancellationReason reason = cart.getState() == CartState.PURCHASED
                 ? CancellationReason.PURCHASED
                 : CancellationReason.CLEARED;
-        scheduler.cancelPendingByCartId(cart.getCartId(), reason);
+        cancelAbandonmentCheck(cart.getCartId(), scheduledVersion, reason);
         return new CartProcessResult(cartActivityDao.save(cart), ProcessResultType.TERMINATED);
     }
 
     private CartProcessResult merge(CartEvent event, LocalDateTime activityTime) {
         CartActivity guest = cartActivityDao.findByCartId(event.getCartId()).orElseGet(CartActivity::new);
+        int scheduledVersion = guest.getCartVersion();
         if (guest.getCartId() == null) {
             guest.setCartId(event.getCartId());
+            scheduledVersion = 1;
             guest.setCartVersion(1);
             guest.setCreatedAt(activityTime);
         } else {
-            guest.setCartVersion(guest.getCartVersion() + 1);
+            guest.setCartVersion(scheduledVersion + 1);
         }
         guest.setState(CartState.CLEARED);
         guest.setLastEventId(event.getEventId());
         guest.setLastActivityTime(activityTime);
         guest.setUpdatedAt(activityTime);
-        scheduler.cancelPendingByCartId(guest.getCartId(), CancellationReason.MERGED);
+        cancelAbandonmentCheck(guest.getCartId(), scheduledVersion, CancellationReason.MERGED);
         cartActivityDao.save(guest);
 
         String targetCartId = event.getTargetCartId() != null ? event.getTargetCartId() : event.getUserId();
@@ -146,7 +152,7 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
         targetEvent.setCartId(targetCartId);
         targetEvent.setUserId(event.getUserId());
         targetEvent.setSessionId(event.getSessionId());
-        targetEvent.setUserType(com.casestudy.abandonment.model.UserType.ACCOUNT);
+        targetEvent.setUserType(UserType.ACCOUNT);
         targetEvent.setActivityType(ActivityType.EDIT);
         targetEvent.setActivityTime(activityTime);
         upsertActive(targetEvent, cartActivityDao.findByCartId(targetCartId), activityTime);
@@ -154,7 +160,6 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
     }
 
     private void scheduleAbandonmentCheck(CartActivity cart) {
-        String key = abandonmentKey(cart.getCartId(), cart.getCartVersion());
         LocalDateTime fireAt = cart.getLastActivityTime().plusMinutes(configService.getAbandonmentWindowInMinutes());
         ScheduleMetadata metadata = new ScheduleMetadata(
                 cart.getCartId(),
@@ -164,12 +169,18 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
                 cart.getCartVersion(),
                 null
         );
-        scheduler.schedule(JobType.ABANDONMENT_CONFIRM, key, fireAt, metadata);
+        scheduler.schedule(
+                JobType.ABANDONMENT_CONFIRM,
+                ScheduleKeys.abandonment(cart.getCartId(), cart.getCartVersion()),
+                fireAt,
+                metadata
+        );
     }
 
-    private String abandonmentKey(String cartId, int version) {
-        return cartId + ":" + version + ":abandonment";
+    private void cancelAbandonmentCheck(String cartId, int version, CancellationReason reason) {
+        scheduler.cancel(ScheduleKeys.abandonment(cartId, version), reason);
     }
+
     private static void applyIdentity(CartActivity cart, CartEvent event) {
         cart.setUserId(event.getUserId());
         cart.setSessionId(event.getSessionId());

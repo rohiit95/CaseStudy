@@ -65,17 +65,18 @@ public final class SchedulerImpl implements Scheduler {
     }
 
     @Override
-    public int cancelPendingByCartId(String cartId, CancellationReason reason) {
-        return scheduleDao.cancelPendingByCartId(cartId, reason, clock.now());
+    public boolean cancel(String idempotencyKey, CancellationReason reason) {
+        return scheduleDao.findByIdempotencyKey(idempotencyKey)
+                .filter(job -> job.getStatus() == JobStatus.PENDING)
+                .map(job -> {
+                    scheduleDao.updateStatus(job.getScheduleId(), JobStatus.CANCELLED, reason, clock.now());
+                    return true;
+                })
+                .orElse(false);
     }
 
     @Override
     public List<ScheduleJob> claimDue(JobType jobType, int limit) {
         return scheduleDao.claimDue(jobType, clock.now(), limit);
-    }
-
-    @Override
-    public List<ScheduleJob> jobsForCart(String cartId) {
-        return scheduleDao.findByCartId(cartId);
     }
 }

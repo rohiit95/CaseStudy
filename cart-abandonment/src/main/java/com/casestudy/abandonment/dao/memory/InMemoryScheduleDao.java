@@ -60,13 +60,6 @@ public final class InMemoryScheduleDao implements ScheduleDao {
     }
 
     @Override
-    public List<ScheduleJob> findByCartIdAndType(String cartId, JobType jobType) {
-        return findByCartId(cartId).stream()
-                .filter(job -> job.getJobType() == jobType)
-                .toList();
-    }
-
-    @Override
     public List<ScheduleJob> claimDue(JobType jobType, LocalDateTime now, int limit) {
         if (jobType == null) {
             throw new IllegalArgumentException("jobType is required to claim jobs");
@@ -91,20 +84,6 @@ public final class InMemoryScheduleDao implements ScheduleDao {
         } finally {
             claimLock.unlock();
         }
-    }
-
-    @Override
-    public int cancelPendingByCartId(String cartId, CancellationReason reason, LocalDateTime now) {
-        int cancelled = 0;
-        for (ScheduleJob job : timeIndexedScheduleJobsMap.values()) {
-            if (cartId.equals(job.getMetadata().cartId()) && job.getStatus() == JobStatus.PENDING) {
-                job.setStatus(JobStatus.CANCELLED);
-                job.setCancellationReason(reason);
-                job.setUpdatedAt(now);
-                cancelled++;
-            }
-        }
-        return cancelled;
     }
 
     @Override

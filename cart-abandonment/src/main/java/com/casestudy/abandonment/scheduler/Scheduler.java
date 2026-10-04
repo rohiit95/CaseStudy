@@ -19,9 +19,7 @@ public interface Scheduler {
 
     ScheduleJob reschedule(String idempotencyKey, LocalDateTime scheduledAt);
 
-    int cancelPendingByCartId(String cartId, CancellationReason reason);
+    boolean cancel(String idempotencyKey, CancellationReason reason);
 
     List<ScheduleJob> claimDue(JobType jobType, int limit);
-
-    List<ScheduleJob> jobsForCart(String cartId);
 }

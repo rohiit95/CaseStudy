@@ -54,7 +54,7 @@ class CartAbandonmentPipelineTest {
         assertThat(result.cart().getCartVersion()).isEqualTo(1);
         assertThat(result.cart().getState()).isEqualTo(CartState.ACTIVE);
         assertThat(result.cart().getLastEventId()).isEqualTo("evt-1");
-        assertThat(module.scheduler().jobsForCart("cart-1"))
+        assertThat(module.scheduleDao().findByCartId("cart-1"))
                 .extracting(ScheduleJob::getJobType)
                 .containsExactly(JobType.ABANDONMENT_CONFIRM);
     }
@@ -66,7 +66,7 @@ class CartAbandonmentPipelineTest {
         var second = module.cartEventProcessor().process(event);
 
         assertThat(second.type()).isEqualTo(ProcessResultType.DUPLICATE);
-        assertThat(module.scheduler().jobsForCart("cart-dup")).hasSize(1);
+        assertThat(module.scheduleDao().findByCartId("cart-dup")).hasSize(1);
     }
 
     @Test
@@ -76,7 +76,7 @@ class CartAbandonmentPipelineTest {
         var updated = module.cartEventProcessor().process(edit("e2", "cart-db", "user-1"));
 
         assertThat(updated.cart().getCartVersion()).isEqualTo(1);
-        List<ScheduleJob> jobs = module.scheduler().jobsForCart("cart-db").stream()
+        List<ScheduleJob> jobs = module.scheduleDao().findByCartId("cart-db").stream()
                 .filter(job -> job.getJobType() == JobType.ABANDONMENT_CONFIRM)
                 .toList();
         assertThat(jobs).hasSize(1);
@@ -90,7 +90,7 @@ class CartAbandonmentPipelineTest {
         var updated = module.cartEventProcessor().process(edit("e2", "cart-v", "user-1"));
 
         assertThat(updated.cart().getCartVersion()).isEqualTo(2);
-        List<ScheduleJob> jobs = module.scheduler().jobsForCart("cart-v");
+        List<ScheduleJob> jobs = module.scheduleDao().findByCartId("cart-v");
         assertThat(jobs.stream().filter(j -> j.getStatus() == JobStatus.CANCELLED)).isNotEmpty();
         assertThat(jobs.stream().filter(j -> j.getStatus() == JobStatus.PENDING)).hasSize(1);
         assertThat(jobs.stream().filter(j -> j.getStatus() == JobStatus.PENDING).findFirst().orElseThrow()
@@ -139,6 +139,8 @@ class CartAbandonmentPipelineTest {
         purchase.setActivityType(ActivityType.PURCHASE);
         module.cartEventProcessor().process(purchase);
 
+        assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.PENDING)).hasSize(3);
+
         clock.advance(Duration.ofMinutes(30));
         runReminderJobs();
 
@@ -146,7 +148,9 @@ class CartAbandonmentPipelineTest {
                 .isEqualTo(CartState.PURCHASED);
         assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
         assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.CANCELLED))
+                .hasSize(1)
                 .allMatch(job -> job.getCancellationReason() == CancellationReason.PURCHASED);
+        assertThat(jobs("cart-buy", JobType.REMINDER, JobStatus.PENDING)).hasSize(2);
     }
 
     @Test
@@ -316,7 +320,7 @@ class CartAbandonmentPipelineTest {
     }
 
     private List<ScheduleJob> jobs(String cartId, JobType type, JobStatus status) {
-        return module.scheduler().jobsForCart(cartId).stream()
+        return module.scheduleDao().findByCartId(cartId).stream()
                 .filter(job -> job.getJobType() == type && job.getStatus() == status)
                 .toList();
     }

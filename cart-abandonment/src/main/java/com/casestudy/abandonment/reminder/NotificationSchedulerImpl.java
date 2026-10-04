@@ -6,6 +6,7 @@ import com.casestudy.abandonment.model.CartActivity;
 import com.casestudy.abandonment.model.JobType;
 import com.casestudy.abandonment.model.ScheduleJob;
 import com.casestudy.abandonment.model.ScheduleMetadata;
+import com.casestudy.abandonment.scheduler.ScheduleKeys;
 import com.casestudy.abandonment.scheduler.Scheduler;
 import com.casestudy.abandonment.time.Clock;
 
@@ -53,15 +54,11 @@ public final class NotificationSchedulerImpl implements NotificationScheduler {
             );
             jobs.add(scheduler.schedule(
                     JobType.REMINDER,
-                    reminderKey(cart.getCartId(), cart.getCartVersion(), window),
+                    ScheduleKeys.reminder(cart.getCartId(), cart.getCartVersion(), window),
                     fireAt,
                     metadata
             ));
         }
         return jobs;
-    }
-
-    private String reminderKey(String cartId, int version, int window) {
-        return cartId + ":" + version + ":reminder:" + window;
     }
 }
