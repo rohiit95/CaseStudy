@@ -4,6 +4,7 @@ import com.casestudy.models.CartActivity;
 import com.casestudy.dao.CartActivityStore;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.transaction.NotSupportedException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +21,11 @@ public class JpaCartActivityStore implements CartActivityStore {
 
     @Override
     public Optional<CartActivity> findByCartId(String cartId) {
-        return Optional.ofNullable(entityManager.find(CartActivity.class, cartId));
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public CartActivity save(CartActivity cartActivity) {
-        CartActivity persisted = entityManager.merge(cartActivity);
-        entityManager.flush();
-        return persisted;
+        throw new RuntimeException("Not implemented");
     }
 }

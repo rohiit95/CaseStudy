@@ -24,95 +24,42 @@ public class JpaReminderScheduleStore implements ReminderScheduleStore {
 
     @Override
     public int cancelPendingByCartId(String cartId, LocalDateTime now) {
-        int updated = entityManager.createQuery("""
-                        update ReminderSchedule r
-                        set r.status = :cancelled,
-                            r.updatedAt = :now
-                        where r.cartId = :cartId
-                          and r.status = :pending
-                        """)
-                .setParameter("cancelled", ReminderStatus.CANCELLED)
-                .setParameter("now", now)
-                .setParameter("cartId", cartId)
-                .setParameter("pending", ReminderStatus.PENDING)
-                .executeUpdate();
-        entityManager.clear();
-        return updated;
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public List<ReminderSchedule> saveAll(List<ReminderSchedule> reminders) {
-        List<ReminderSchedule> saved = new ArrayList<>();
-        for (ReminderSchedule reminder : reminders) {
-            saved.add(entityManager.merge(reminder));
-        }
-        entityManager.flush();
-        return saved;
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public List<ReminderSchedule> findByCartIdAndActivityVersion(String cartId, Integer activityVersion) {
-        return entityManager.createQuery("""
-                        select r from ReminderSchedule r
-                        where r.cartId = :cartId
-                          and r.activityVersion = :activityVersion
-                        order by r.reminderWindowInMins asc
-                        """, ReminderSchedule.class)
-                .setParameter("cartId", cartId)
-                .setParameter("activityVersion", activityVersion)
-                .getResultList();
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public List<ReminderSchedule> claimDuePending(int limit, LocalDateTime now) {
-        List<ReminderSchedule> locked = entityManager.createNativeQuery(
-                """
-                SELECT * FROM ReminderSchedule
-                WHERE status = 'PENDING' AND scheduledAt <= :now
-                LIMIT :limit FOR UPDATE SKIP LOCKED
-                """,
-                ReminderSchedule.class
-        )
-                .setParameter("now", now)
-                .setParameter("limit", limit)
-                .getResultList();
-
-        for (ReminderSchedule reminder : locked) {
-            reminder.setStatus(ReminderStatus.CLAIMED);
-            reminder.setUpdatedAt(now);
-        }
-        entityManager.flush();
-        return locked;
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public Optional<ReminderSchedule> findById(Long reminderId) {
-        return Optional.ofNullable(entityManager.find(ReminderSchedule.class, reminderId));
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public void updateStatus(ReminderSchedule reminder, ReminderStatus status, LocalDateTime now) {
-        ReminderSchedule managed = entityManager.merge(reminder);
-        managed.setStatus(status);
-        managed.setUpdatedAt(now);
-        entityManager.flush();
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public void markProcessed(ReminderSchedule reminder, LocalDateTime now) {
-        ReminderSchedule managed = entityManager.merge(reminder);
-        managed.setStatus(ReminderStatus.FIRED);
-        managed.setUpdatedAt(now);
-        entityManager.flush();
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public void markFailed(ReminderSchedule reminder, LocalDateTime now) {
-        ReminderSchedule managed = entityManager.merge(reminder);
-        managed.setAttemptCount(managed.getAttemptCount() + 1);
-        managed.setStatus(ReminderStatus.FAILED);
-        managed.setUpdatedAt(now);
-        entityManager.flush();
+        throw new RuntimeException("Not implemented");
     }
 }
