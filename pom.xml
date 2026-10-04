@@ -21,7 +21,7 @@
     <modules>
         <module>ConfigService</module>
         <module>AbService</module>
-        <module>casestudy-app</module>
+        <module>cart-abandonment</module>
     </modules>
 
     <properties>

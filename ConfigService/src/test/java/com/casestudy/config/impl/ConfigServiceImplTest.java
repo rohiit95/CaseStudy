@@ -22,4 +22,10 @@ class ConfigServiceImplTest {
     void defaultMessageTemplateIsSet() {
         assertThat(configService.getMessageTemplate()).isEqualTo("cart-abandoned-default");
     }
+
+    @Test
+    void abandonmentAndDebounceWindowsAreTunableDefaults() {
+        assertThat(configService.getAbandonmentWindowInMinutes()).isEqualTo(30);
+        assertThat(configService.getDebounceWindowInMinutes()).isEqualTo(10);
+    }
 }

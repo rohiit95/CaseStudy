@@ -1,0 +1,29 @@
+package com.casestudy.abandonment.experiment;
+
+import com.casestudy.ab.AbService;
+import com.casestudy.ab.CartReminderVariant;
+import com.casestudy.config.ConfigService;
+
+public final class ExperimentResolverImpl implements ExperimentResolver {
+
+    private final AbService abService;
+    private final ConfigService configService;
+
+    public ExperimentResolverImpl(AbService abService, ConfigService configService) {
+        this.abService = abService;
+        this.configService = configService;
+    }
+
+    @Override
+    public CartReminderVariant resolve(String subjectId) {
+        return abService.getCartReminderVariant(subjectId, defaults());
+    }
+
+    private CartReminderVariant defaults() {
+        return new CartReminderVariant(
+                configService.getReminderWindowsInMinutes(),
+                configService.getMessageTemplate(),
+                configService.isRemindersEnabled()
+        );
+    }
+}

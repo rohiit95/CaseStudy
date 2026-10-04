@@ -24,4 +24,14 @@ public class ConfigServiceImpl implements ConfigService {
     public String getMessageTemplate() {
         return "cart-abandoned-default";
     }
+
+    @Override
+    public int getAbandonmentWindowInMinutes() {
+        return 30;
+    }
+
+    @Override
+    public int getDebounceWindowInMinutes() {
+        return 10;
+    }
 }
