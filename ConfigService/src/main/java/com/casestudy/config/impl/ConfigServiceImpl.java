@@ -26,6 +26,11 @@ public class ConfigServiceImpl implements ConfigService {
     }
 
     @Override
+    public String getReminderChannel() {
+        return "EMAIL";
+    }
+
+    @Override
     public int getAbandonmentWindowInMinutes() {
         return 30;
     }

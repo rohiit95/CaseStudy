@@ -11,6 +11,11 @@ public interface ConfigService {
     String getMessageTemplate();
 
     /**
+     * Default reminder channel when the user is not in a test bucket (EMAIL, SMS, PUSH).
+     */
+    String getReminderChannel();
+
+    /**
      * Inactivity window X before a cart is treated as abandoned (minutes).
      */
     int getAbandonmentWindowInMinutes();

@@ -2,6 +2,7 @@ package com.casestudy.abandonment;
 
 import com.casestudy.ab.AbService;
 import com.casestudy.ab.CartReminderVariant;
+import com.casestudy.ab.ReminderChannel;
 import com.casestudy.abandonment.model.ActivityType;
 import com.casestudy.abandonment.model.CancellationReason;
 import com.casestudy.abandonment.model.CartEvent;
@@ -11,6 +12,8 @@ import com.casestudy.abandonment.model.JobType;
 import com.casestudy.abandonment.model.ProcessResultType;
 import com.casestudy.abandonment.model.ScheduleJob;
 import com.casestudy.abandonment.model.UserType;
+import com.casestudy.abandonment.send.NotificationChannelType;
+import com.casestudy.abandonment.send.RecordingNotificationPublisher;
 import com.casestudy.abandonment.time.FakeClock;
 import com.casestudy.config.impl.ConfigServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,13 +31,15 @@ class CartAbandonmentPipelineTest {
     private CartAbandonmentModule module;
     private ConfigServiceImpl config;
     private FixedAbService abService;
+    private RecordingNotificationPublisher publisher;
 
     @BeforeEach
     void setUp() {
         clock = FakeClock.startedAt(Instant.parse("2026-10-04T00:00:00Z"));
         config = new ConfigServiceImpl();
-        abService = new FixedAbService(true, List.of(30, 60, 1440), "cart-abandoned-default");
-        module = new CartAbandonmentModule(clock, config, abService);
+        abService = new FixedAbService(true, List.of(30, 60, 1440), "cart-abandoned-default", ReminderChannel.EMAIL);
+        publisher = new RecordingNotificationPublisher();
+        module = new CartAbandonmentModule(clock, config, abService, publisher);
     }
 
     @Test
@@ -178,13 +183,29 @@ class CartAbandonmentPipelineTest {
     @Test
     void holdoutDoesNotScheduleReminders() {
         abService.reminderEnabled = false;
-        module = new CartAbandonmentModule(clock, config, abService);
+        module = new CartAbandonmentModule(clock, config, abService, publisher);
         module.cartEventProcessor().process(edit("e1", "cart-hold", "user-1"));
         clock.advance(Duration.ofMinutes(30));
         module.jobRunner().runDue(20);
 
         assertThat(jobs("cart-hold", JobType.ABANDONMENT_CONFIRM, JobStatus.FIRED)).hasSize(1);
         assertThat(jobs("cart-hold", JobType.REMINDER, JobStatus.PENDING)).isEmpty();
+    }
+
+    @Test
+    void dispatchesReminderOnAssignedAbChannel() {
+        abService.channel = ReminderChannel.SMS;
+        module = new CartAbandonmentModule(clock, config, abService, publisher);
+        module.cartEventProcessor().process(edit("e1", "cart-sms", "user-1"));
+        clock.advance(Duration.ofMinutes(30));
+        module.jobRunner().runDue(20);
+        clock.advance(Duration.ofMinutes(30));
+        module.jobRunner().runDue(20);
+
+        assertThat(jobs("cart-sms", JobType.REMINDER, JobStatus.FIRED)).hasSize(1);
+        assertThat(publisher.getPublished())
+                .isNotEmpty()
+                .allMatch(published -> published.channelType() == NotificationChannelType.SMS);
     }
 
     private List<ScheduleJob> jobs(String cartId, JobType type, JobStatus status) {
@@ -208,11 +229,18 @@ class CartAbandonmentPipelineTest {
         private boolean reminderEnabled;
         private final List<Integer> windows;
         private final String template;
+        private ReminderChannel channel;
 
-        private FixedAbService(boolean reminderEnabled, List<Integer> windows, String template) {
+        private FixedAbService(
+                boolean reminderEnabled,
+                List<Integer> windows,
+                String template,
+                ReminderChannel channel
+        ) {
             this.reminderEnabled = reminderEnabled;
             this.windows = windows;
             this.template = template;
+            this.channel = channel;
         }
 
         @Override
@@ -227,7 +255,7 @@ class CartAbandonmentPipelineTest {
 
         @Override
         public CartReminderVariant getCartReminderVariant(String subjectId, CartReminderVariant defaults) {
-            return new CartReminderVariant(windows, template, reminderEnabled);
+            return new CartReminderVariant(windows, template, reminderEnabled, channel);
         }
     }
 }

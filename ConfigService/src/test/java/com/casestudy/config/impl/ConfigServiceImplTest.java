@@ -24,6 +24,11 @@ class ConfigServiceImplTest {
     }
 
     @Test
+    void defaultReminderChannelIsEmail() {
+        assertThat(configService.getReminderChannel()).isEqualTo("EMAIL");
+    }
+
+    @Test
     void abandonmentAndDebounceWindowsAreTunableDefaults() {
         assertThat(configService.getAbandonmentWindowInMinutes()).isEqualTo(30);
         assertThat(configService.getDebounceWindowInMinutes()).isEqualTo(10);

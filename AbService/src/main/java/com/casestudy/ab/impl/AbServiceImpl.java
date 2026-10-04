@@ -4,6 +4,7 @@ import com.casestudy.ab.AbBucket;
 import com.casestudy.ab.AbService;
 import com.casestudy.ab.AbVariables;
 import com.casestudy.ab.CartReminderVariant;
+import com.casestudy.ab.ReminderChannel;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -18,22 +19,26 @@ public class AbServiceImpl implements AbService {
     static final CartReminderVariant TEST_1 = new CartReminderVariant(
             List.of(15, 45, 180),
             "cart-short-nudge",
-            true
+            true,
+            ReminderChannel.EMAIL
     );
     static final CartReminderVariant TEST_2 = new CartReminderVariant(
             List.of(20, 40, 120),
             "cart-mid-nudge",
-            true
+            true,
+            ReminderChannel.SMS
     );
     static final CartReminderVariant TEST_3 = new CartReminderVariant(
             List.of(10, 30, 90),
             "cart-urgent-nudge",
-            true
+            true,
+            ReminderChannel.PUSH
     );
     static final CartReminderVariant TEST_4 = new CartReminderVariant(
             List.of(60, 180, 1440),
             "cart-long-nudge",
-            false
+            false,
+            ReminderChannel.EMAIL
     );
 
     private static final Map<String, List<CartReminderVariant>> TEST_BUCKET_VARIANTS = Map.of(
@@ -54,6 +59,7 @@ public class AbServiceImpl implements AbService {
             case AbVariables.REMINDER_WINDOWS -> assigned.reminderWindows();
             case AbVariables.MESSAGE_TEMPLATE -> assigned.messageTemplate();
             case AbVariables.REMINDER_ENABLED -> assigned.reminderEnabled();
+            case AbVariables.CHANNEL -> assigned.channel();
             default -> defaultValue;
         };
         return (T) value;
@@ -70,7 +76,7 @@ public class AbServiceImpl implements AbService {
             CartReminderVariant defaults
     ) {
         CartReminderVariant fallback = defaults == null
-                ? new CartReminderVariant(List.of(), "", false)
+                ? new CartReminderVariant(List.of(), "", false, ReminderChannel.EMAIL)
                 : defaults;
         AbBucket bucket = assignBucket(experimentKey, subjectId);
         if (bucket.isDefault()) {
@@ -97,19 +103,28 @@ public class AbServiceImpl implements AbService {
             case AbVariables.REMINDER_WINDOWS -> new CartReminderVariant(
                     defaultValue instanceof List<?> windows ? (List<Integer>) windows : List.of(),
                     "",
-                    false
+                    false,
+                    ReminderChannel.EMAIL
             );
             case AbVariables.MESSAGE_TEMPLATE -> new CartReminderVariant(
                     List.of(),
                     defaultValue instanceof String template ? template : "",
-                    false
+                    false,
+                    ReminderChannel.EMAIL
             );
             case AbVariables.REMINDER_ENABLED -> new CartReminderVariant(
                     List.of(),
                     "",
-                    defaultValue instanceof Boolean enabled && enabled
+                    defaultValue instanceof Boolean enabled && enabled,
+                    ReminderChannel.EMAIL
             );
-            default -> new CartReminderVariant(List.of(), "", false);
+            case AbVariables.CHANNEL -> new CartReminderVariant(
+                    List.of(),
+                    "",
+                    false,
+                    defaultValue instanceof ReminderChannel ch ? ch : ReminderChannel.EMAIL
+            );
+            default -> new CartReminderVariant(List.of(), "", false, ReminderChannel.EMAIL);
         };
     }
 }

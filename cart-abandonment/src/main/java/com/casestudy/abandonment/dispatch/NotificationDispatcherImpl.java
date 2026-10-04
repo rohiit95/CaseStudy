@@ -89,7 +89,7 @@ public final class NotificationDispatcherImpl implements NotificationDispatcher,
                 job.getMetadata().cartId(),
                 job.getMetadata().userId(),
                 variant.messageTemplate(),
-                NotificationChannelType.EMAIL
+                toChannelType(variant.channel())
         );
         PublishResult published = channelRegistry.get(request.channelType()).publish(request);
         if (!published.success()) {
@@ -98,5 +98,16 @@ public final class NotificationDispatcherImpl implements NotificationDispatcher,
         }
         scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
         return DispatchResult.fired(published.providerMessageId());
+    }
+
+    private static NotificationChannelType toChannelType(com.casestudy.ab.ReminderChannel channel) {
+        if (channel == null) {
+            return NotificationChannelType.EMAIL;
+        }
+        return switch (channel) {
+            case EMAIL -> NotificationChannelType.EMAIL;
+            case SMS -> NotificationChannelType.SMS;
+            case PUSH -> NotificationChannelType.PUSH;
+        };
     }
 }

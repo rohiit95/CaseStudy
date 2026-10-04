@@ -2,6 +2,7 @@ package com.casestudy.abandonment.experiment;
 
 import com.casestudy.ab.AbService;
 import com.casestudy.ab.CartReminderVariant;
+import com.casestudy.ab.ReminderChannel;
 import com.casestudy.config.ConfigService;
 
 public final class ExperimentResolverImpl implements ExperimentResolver {
@@ -23,7 +24,19 @@ public final class ExperimentResolverImpl implements ExperimentResolver {
         return new CartReminderVariant(
                 configService.getReminderWindowsInMinutes(),
                 configService.getMessageTemplate(),
-                configService.isRemindersEnabled()
+                configService.isRemindersEnabled(),
+                parseChannel(configService.getReminderChannel())
         );
+    }
+
+    private static ReminderChannel parseChannel(String channel) {
+        if (channel == null || channel.isBlank()) {
+            return ReminderChannel.EMAIL;
+        }
+        try {
+            return ReminderChannel.valueOf(channel.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return ReminderChannel.EMAIL;
+        }
     }
 }

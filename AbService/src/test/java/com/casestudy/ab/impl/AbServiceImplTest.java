@@ -3,6 +3,7 @@ package com.casestudy.ab.impl;
 import com.casestudy.ab.AbBucket;
 import com.casestudy.ab.AbVariables;
 import com.casestudy.ab.CartReminderVariant;
+import com.casestudy.ab.ReminderChannel;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -19,7 +20,8 @@ class AbServiceImplTest {
     private static final CartReminderVariant DEFAULTS = new CartReminderVariant(
             List.of(30, 60, 1440),
             "cart-abandoned-default",
-            true
+            true,
+            ReminderChannel.EMAIL
     );
 
     private static final Map<AbBucket, CartReminderVariant> VARIANT_BY_BUCKET;
@@ -47,7 +49,7 @@ class AbServiceImplTest {
     }
 
     @Test
-    void eachBucketVariesWindowsTemplateAndEnabled() {
+    void eachBucketVariesWindowsTemplateEnabledAndChannel() {
         for (AbBucket bucket : AbBucket.values()) {
             String subject = subjectIn(bucket);
             CartReminderVariant expected = VARIANT_BY_BUCKET.get(bucket);
@@ -72,6 +74,12 @@ class AbServiceImplTest {
                     subject,
                     DEFAULTS.reminderEnabled()
             )).isEqualTo(expected.reminderEnabled());
+            assertThat(abService.getValue(
+                    AbServiceImpl.CART_REMINDERS_EXPERIMENT,
+                    AbVariables.CHANNEL,
+                    subject,
+                    DEFAULTS.channel()
+            )).isEqualTo(expected.channel());
             assertThat(abService.isEnabled(AbServiceImpl.CART_REMINDERS_EXPERIMENT, subject)).isTrue();
         }
     }
