@@ -25,4 +25,18 @@ public interface ConfigService {
      * the abandonment timer on every event (minutes).
      */
     int getDebounceWindowInMinutes();
+
+    /**
+     * Max publish attempts (including the first) before a reminder is dead-lettered.
+     */
+    default int getMaxNotificationAttempts() {
+        return 3;
+    }
+
+    /**
+     * Base delay for exponential backoff when the provider does not send Retry-After.
+     */
+    default int getNotificationRetryBaseDelayMinutes() {
+        return 1;
+    }
 }

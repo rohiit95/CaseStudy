@@ -3,8 +3,10 @@ package com.casestudy.abandonment.dispatch;
 import com.casestudy.abandonment.dao.CartActivityDao;
 import com.casestudy.abandonment.dao.ProcessedJobDao;
 import com.casestudy.abandonment.dao.ScheduleDao;
+import com.casestudy.abandonment.exception.CartNotFoundException;
 import com.casestudy.abandonment.guardrail.GuardrailDecision;
 import com.casestudy.abandonment.guardrail.GuardrailEngine;
+import com.casestudy.abandonment.model.CartActivity;
 import com.casestudy.abandonment.model.JobStatus;
 import com.casestudy.abandonment.model.ScheduleJob;
 import com.casestudy.abandonment.reminder.NotificationScheduler;
@@ -37,7 +39,8 @@ public final class AbandonmentConfirmationHandler implements JobHandler {
 
     @Override
     public void handle(ScheduleJob job) {
-        if (!processedJobDao.markProcessed(job.getIdempotencyKey() + ":fired")) {
+        String firedKey = job.getIdempotencyKey() + ":fired";
+        if (processedJobDao.alreadyProcessed(firedKey)) {
             scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
             return;
         }
@@ -51,8 +54,10 @@ public final class AbandonmentConfirmationHandler implements JobHandler {
             );
             return;
         }
-        cartActivityDao.findByCartId(job.getMetadata().cartId())
-                .ifPresent(notificationScheduler::scheduleReminders);
+        CartActivity cart = cartActivityDao.findByCartId(job.getMetadata().cartId())
+                .orElseThrow(() -> new CartNotFoundException(job.getMetadata().cartId()));
+        notificationScheduler.scheduleReminders(cart);
+        processedJobDao.markProcessed(firedKey);
         scheduleDao.updateStatus(job.getScheduleId(), JobStatus.FIRED, null, clock.now());
     }
 }

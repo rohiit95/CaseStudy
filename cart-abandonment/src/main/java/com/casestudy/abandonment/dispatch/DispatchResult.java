@@ -16,4 +16,12 @@ public record DispatchResult(JobStatus status, CancellationReason reason, String
     public static DispatchResult failed(String detail) {
         return new DispatchResult(JobStatus.FAILED, null, detail);
     }
+
+    public static DispatchResult retryScheduled(String retryAt) {
+        return new DispatchResult(JobStatus.PENDING, null, retryAt);
+    }
+
+    public static DispatchResult deadLettered(String detail) {
+        return new DispatchResult(JobStatus.FAILED, null, detail);
+    }
 }

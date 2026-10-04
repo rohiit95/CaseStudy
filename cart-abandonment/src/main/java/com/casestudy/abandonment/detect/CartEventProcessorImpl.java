@@ -1,5 +1,6 @@
 package com.casestudy.abandonment.detect;
 
+import com.casestudy.abandonment.exception.InvalidCartEventException;
 import com.casestudy.abandonment.dao.CartActivityDao;
 import com.casestudy.abandonment.model.ActivityType;
 import com.casestudy.abandonment.model.CancellationReason;
@@ -38,6 +39,18 @@ public final class CartEventProcessorImpl implements CartEventProcessor {
 
     @Override
     public CartProcessResult process(CartEvent event) {
+        if (event == null) {
+            throw new InvalidCartEventException("Cart event is required");
+        }
+        if (event.getEventId() == null || event.getEventId().isBlank()) {
+            throw new InvalidCartEventException("eventId is required");
+        }
+        if (event.getCartId() == null || event.getCartId().isBlank()) {
+            throw new InvalidCartEventException("cartId is required");
+        }
+        if (event.getActivityType() == null) {
+            throw new InvalidCartEventException("activityType is required");
+        }
         LocalDateTime activityTime = event.getActivityTime() != null ? event.getActivityTime() : clock.now();
         Optional<CartActivity> existing = cartActivityDao.findByCartId(event.getCartId());
 

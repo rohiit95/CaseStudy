@@ -1,5 +1,6 @@
 package com.casestudy.abandonment.send;
 
+import com.casestudy.abandonment.exception.UnknownNotificationChannelException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +18,7 @@ public final class NotificationChannelRegistry {
     public NotificationChannel get(NotificationChannelType type) {
         NotificationChannel channel = channels.get(type);
         if (channel == null) {
-            throw new IllegalArgumentException("No channel for " + type);
+            throw new UnknownNotificationChannelException("No channel registered for " + type);
         }
         return channel;
     }
