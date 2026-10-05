@@ -80,13 +80,13 @@ class CartAbandonmentPipelineTest {
                 .filter(job -> job.getJobType() == JobType.ABANDONMENT_CONFIRM)
                 .toList();
         assertThat(jobs).hasSize(1);
-        assertThat(jobs.stream().findFirst().get().getScheduledAt()).isEqualTo(clock.now().plusMinutes(30));
+        assertThat(jobs.stream().findFirst().get().getScheduledAt()).isEqualTo(clock.now().plusMinutes((config.getAbandonmentWindowInMinutes())));
     }
 
     @Test
     void editAfterDebounceBumpsVersionAndReschedules() {
         module.cartEventProcessor().process(edit("e1", "cart-v", "user-1"));
-        clock.advance(Duration.ofMinutes(11));
+        clock.advance(Duration.ofMinutes(config.getDebounceWindowInMinutes() + 1));
         var updated = module.cartEventProcessor().process(edit("e2", "cart-v", "user-1"));
 
         assertThat(updated.cart().getCartVersion()).isEqualTo(2);
@@ -101,7 +101,7 @@ class CartAbandonmentPipelineTest {
     void fakeClockTriggersAbandonmentThenReminders() {
         module.cartEventProcessor().process(edit("e1", "cart-time", "user-1"));
 
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
         assertThat(jobs("cart-time", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
         assertThat(jobs("cart-time", JobType.REMINDER, JobStatus.PENDING)).hasSize(3);
@@ -115,7 +115,7 @@ class CartAbandonmentPipelineTest {
     @Test
     void reminderWindowsAreOffsetFromConfirmationTimeNotLastActivityPlusAbandonmentWindow() {
         module.cartEventProcessor().process(edit("e1", "cart-confirm", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         LocalDateTime confirmedAt = clock.now();
         runConfirmationJobs();
 
@@ -132,7 +132,7 @@ class CartAbandonmentPipelineTest {
     @Test
     void purchaseSuppressesPendingReminders() {
         module.cartEventProcessor().process(edit("e1", "cart-buy", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
 
         CartEvent purchase = edit("e-buy", "cart-buy", "user-1");
@@ -156,7 +156,7 @@ class CartAbandonmentPipelineTest {
     @Test
     void fireTimeGuardSuppressesStaleVersionAfterPurchase() {
         module.cartEventProcessor().process(edit("e1", "cart-race", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
         ScheduleJob reminder = jobs("cart-race", JobType.REMINDER, JobStatus.PENDING).stream().findFirst().get();
 
@@ -172,7 +172,7 @@ class CartAbandonmentPipelineTest {
     @Test
     void versionMismatchCancelsStaleReminderAtDispatch() {
         module.cartEventProcessor().process(edit("e1", "cart-stale", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
         ScheduleJob reminder = jobs("cart-stale", JobType.REMINDER, JobStatus.PENDING).stream().findFirst().get();
 
@@ -210,7 +210,7 @@ class CartAbandonmentPipelineTest {
         abService.reminderEnabled = false;
         module = new CartAbandonmentModule(clock, config, abService, publisher);
         module.cartEventProcessor().process(edit("e1", "cart-hold", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
 
         assertThat(jobs("cart-hold", JobType.ABANDONMENT_CONFIRM, JobStatus.PROCESSED)).hasSize(1);
@@ -222,9 +222,9 @@ class CartAbandonmentPipelineTest {
         abService.channel = ReminderChannel.SMS;
         module = new CartAbandonmentModule(clock, config, abService, publisher);
         module.cartEventProcessor().process(edit("e1", "cart-sms", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(abService.windows.get(0)));
         runReminderJobs();
 
         assertThat(jobs("cart-sms", JobType.REMINDER, JobStatus.PROCESSED)).hasSize(1);
@@ -248,9 +248,9 @@ class CartAbandonmentPipelineTest {
         module = new CartAbandonmentModule(clock, config, abService, limited);
 
         module.cartEventProcessor().process(edit("e1", "cart-429", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
         runConfirmationJobs();
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(abService.windows.get(0)));
         runReminderJobs();
 
         assertThat(jobs("cart-429", JobType.REMINDER, JobStatus.PROCESSED)).isEmpty();
@@ -298,7 +298,7 @@ class CartAbandonmentPipelineTest {
     @Test
     void reminderRunnerDoesNotClaimDueConfirmationJobs() {
         module.cartEventProcessor().process(edit("e1", "cart-typed", "user-1"));
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(Duration.ofMinutes(config.getAbandonmentWindowInMinutes()));
 
         runReminderJobs();
 
